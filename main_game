@@ -1,0 +1,315 @@
+import pygame
+import random
+
+game_images = {
+    "0": pygame.image.load("./images/0.png"),
+    "1": pygame.image.load("./images/1.png"),
+    "2": pygame.image.load("./images/2.png"),
+    "3": pygame.image.load("./images/3.png"),
+    "4": pygame.image.load("./images/4.png"),
+    "5": pygame.image.load("./images/5.png"),
+    "6": pygame.image.load("./images/6.png"),
+    "7": pygame.image.load("./images/7.png"),
+    "8": pygame.image.load("./images/8.png"),
+    "bomb": pygame.image.load("./images/bomb.png"),
+    "unclicked": pygame.image.load("./images/unclicked.png"),
+    "flag": pygame.image.load("./images/flag.png"),
+}
+
+
+class Game:
+    def __init__(self, difficulty):
+        self.play = True
+        self.difficulty = difficulty
+        self.width = self.set_difficulty()[0]
+        self.height = self.set_difficulty()[1]
+        self.rows = self.set_difficulty()[2]
+        self.cols = self.set_difficulty()[3]
+        self.bombs = self.set_difficulty()[4]
+        self.width_scale = self.width / self.cols
+        self.height_scale = self.height / self.rows
+        self.images = self.scale_images()
+        self.font = "helvetica.ttf"
+        self.game_over_message = False
+        self.game_win_message = False
+
+    def set_difficulty(self):
+        if self.difficulty == "coward":
+            return [300, 300, 9, 9, 5]
+        if self.difficulty == "easy":
+            return [300, 300, 9, 9, 10]
+        elif self.difficulty == "medium":
+            return [400, 400, 16, 16, 40]
+        elif self.difficulty == "expert":
+            return [800, 427, 16, 30, 99]
+        elif self.difficulty == "master":
+            return [1000, 534, 32, 60, 200]
+
+    def simple_text(self, display, x, y, text="", color=(255, 255, 255), font_size=16):
+        font_object = pygame.font.SysFont(self.font, font_size)
+        text_object = font_object.render(f"{text}", True, color)
+        display.blit(text_object, (x, y))
+
+    def scale_images(self):
+        image_dict = {}
+        for image in game_images.keys():
+            img = pygame.transform.scale(
+                game_images[image], (self.width_scale, self.height_scale)
+            )
+            image_dict[image] = img
+        return image_dict
+
+    def run(self):
+        pygame.init()
+        pygame.display.set_caption("Minesweeper")
+        while self.play:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    mx, my = pygame.mouse.get_pos()
+                    if event.button == 3:
+                        Piece(mx, my).on_click(True)
+                    else:
+                        Piece(mx, my).on_click(False)
+                if event.type == pygame.KEYUP:
+                    if event.key == pygame.K_SPACE:
+                        board.reveal_all()
+                        self.game_over_message = True
+                        self.game_win_message = False
+                    if event.key == pygame.K_RETURN:
+                        board.new_game()
+                        self.game_over_message = False
+                        self.game_win_message = False
+            board.screen.fill("black")
+            board.display()
+            if self.game_over_message:
+                pygame.draw.rect(
+                    board.screen,
+                    "black",
+                    (0, 0, game.width, 80),
+                )
+                game.simple_text(
+                    board.screen,
+                    5,
+                    5,
+                    "GAME OVER!",
+                    font_size=50,
+                )
+                game.simple_text(
+                    board.screen,
+                    5,
+                    50,
+                    "Press 'enter' to restart",
+                    font_size=30,
+                )
+            if self.game_win_message:
+                pygame.draw.rect(
+                    board.screen,
+                    "black",
+                    (0, 0, game.width, 80),
+                )
+                game.simple_text(
+                    board.screen,
+                    5,
+                    5,
+                    "YOU WIN!",
+                    font_size=50,
+                )
+                game.simple_text(
+                    board.screen,
+                    5,
+                    50,
+                    "Press 'enter' to restart",
+                    font_size=30,
+                )
+            pygame.display.update()
+
+
+class Board:
+    def __init__(self):
+        self.screen = pygame.display.set_mode((game.width, game.height))
+        self.pieces = {}
+        self.bombs_placed = 0
+        self.correct_flags = 0
+        self.new_game()
+
+    # show pieces on board
+    def display(self):
+        for tile in self.pieces.keys():
+            self.screen.blit(
+                self.pieces[tile].image,
+                (
+                    self.pieces[tile].x * game.width_scale,
+                    self.pieces[tile].y * game.height_scale,
+                ),
+            )
+
+    # show all tile contents
+    def reveal_all(self):
+        for piece in self.pieces:
+            if not self.pieces[piece].flagged:
+                if self.pieces[piece].has_bomb:
+                    self.pieces[piece].image = game.images["bomb"]
+                else:
+                    self.pieces[piece].image = game.images[
+                        str(self.pieces[piece].surrounding_bombs)
+                    ]
+
+    def win_check(self):
+        if self.bombs_placed == self.correct_flags:
+            game.game_win_message = True
+            self.reveal_all()
+
+    def new_game(self):
+        self.pieces.clear()
+        self.bombs_placed = 0
+        self.correct_flags = 0
+        # populate board
+        for row in range(game.rows):
+            for col in range(game.cols):
+                self.pieces[(col, row)] = Piece(col, row)
+        # randomly assign bombs to tiles
+        while self.bombs_placed < game.bombs:
+            rx, ry = random.randint(0, game.cols - 1), random.randint(0, game.rows - 1)
+            if not self.pieces[(rx, ry)].has_bomb:
+                self.pieces[(rx, ry)].has_bomb = True
+                self.bombs_placed += 1
+        # get surrounding bomb count
+        for piece in self.pieces:
+            bombs = 0
+            for x in range(self.pieces[piece].x - 1, self.pieces[piece].x + 2):
+                for y in range(self.pieces[piece].y - 1, self.pieces[piece].y + 2):
+                    if x < 0 or x >= game.cols or y < 0 or y >= game.rows:
+                        continue
+                    if (x, y) == (self.pieces[piece].x, self.pieces[piece].y):
+                        continue
+                    else:
+                        if self.pieces[(x, y)].has_bomb:
+                            bombs += 1
+            self.pieces[piece].surrounding_bombs = bombs
+            self.pieces[piece].image = game.images["unclicked"]
+
+    # fill empty tiles until a border is reached
+    def flood_fill(self, px, py):
+        to_check = [self.pieces[(px, py)]]
+
+        def fill():
+            for i in to_check:
+                neighbors = [
+                    (i.x - 1, i.y - 1),
+                    (i.x, i.y - 1),
+                    (i.x + 1, i.y - 1),
+                    (i.x - 1, i.y),
+                    (i.x + 1, i.y),
+                    (i.x - 1, i.y + 1),
+                    (i.x, i.y + 1),
+                    (i.x + 1, i.y + 1),
+                ]
+                for n in neighbors:  # check if tile is on board
+                    if n[0] < 0 or n[0] >= game.cols or n[1] < 0 or n[1] >= game.rows:
+                        continue
+                    else:
+                        if (  # add to list if blank
+                            self.pieces[n].surrounding_bombs == 0
+                            and not self.pieces[n].flagged
+                        ):
+                            if self.pieces[n] not in to_check:
+                                to_check.append(self.pieces[n])
+                            else:
+                                continue
+            # reveal all blanks
+            for j in to_check:
+                j.clicked = True
+                j.image = game.images[str(j.surrounding_bombs)]
+            for piece in self.pieces:
+                if self.pieces[piece].clicked and self.pieces[piece] in to_check:
+                    neighbors = [
+                        (self.pieces[piece].x - 1, self.pieces[piece].y - 1),
+                        (self.pieces[piece].x, self.pieces[piece].y - 1),
+                        (self.pieces[piece].x + 1, self.pieces[piece].y - 1),
+                        (self.pieces[piece].x - 1, self.pieces[piece].y),
+                        (self.pieces[piece].x + 1, self.pieces[piece].y),
+                        (self.pieces[piece].x - 1, self.pieces[piece].y + 1),
+                        (self.pieces[piece].x, self.pieces[piece].y + 1),
+                        (self.pieces[piece].x + 1, self.pieces[piece].y + 1),
+                    ]
+                    for n in neighbors:  # check if tile is on board
+                        if (
+                            n[0] < 0
+                            or n[0] >= game.cols
+                            or n[1] < 0
+                            or n[1] >= game.rows
+                        ):
+                            continue
+                        else:
+                            if (
+                                not self.pieces[n].has_bomb
+                                and not self.pieces[n].flagged
+                            ):
+                                self.pieces[n].clicked = True
+                                self.pieces[n].image = game.images[
+                                    str(self.pieces[n].surrounding_bombs)
+                                ]
+
+        fill()
+
+
+class Piece:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.has_bomb = False
+        self.clicked = False
+        self.flagged = False
+        self.rel_x = int(self.x / game.width_scale)
+        self.rel_y = int(self.y / game.height_scale)
+        self.surrounding_bombs = 0
+        self.image = None
+
+    def on_click(self, right_click):
+        # flag toggle
+        if right_click:
+            if not board.pieces[(self.rel_x, self.rel_y)].clicked:
+                if board.pieces[(self.rel_x, self.rel_y)].flagged:
+                    board.pieces[(self.rel_x, self.rel_y)].image = game.images[
+                        "unclicked"
+                    ]
+                    if (  # flag in right place
+                        board.pieces[(self.rel_x, self.rel_y)].flagged is True
+                        and board.pieces[(self.rel_x, self.rel_y)].has_bomb is True
+                    ):  # remove from correct flag count
+                        board.correct_flags -= 1
+                    board.pieces[(self.rel_x, self.rel_y)].flagged = False
+                else:  # blank > flag
+                    board.pieces[(self.rel_x, self.rel_y)].image = game.images["flag"]
+                    board.pieces[(self.rel_x, self.rel_y)].flagged = True
+                    if (  # flag in right place
+                        board.pieces[(self.rel_x, self.rel_y)].flagged is True
+                        and board.pieces[(self.rel_x, self.rel_y)].has_bomb is True
+                    ):  # add to correct flag count
+                        board.correct_flags += 1
+            board.win_check()
+        else:
+            if (  # if not clicked or flagged
+                not board.pieces[(self.rel_x, self.rel_y)].clicked
+                and not board.pieces[(self.rel_x, self.rel_y)].flagged
+            ):  # if click bomb
+                if board.pieces[(self.rel_x, self.rel_y)].has_bomb:  # if bomb
+                    board.pieces[(self.rel_x, self.rel_y)].image = game.images["bomb"]
+                    board.pieces[(self.rel_x, self.rel_y)].clicked = True
+                    board.reveal_all()
+                    game.game_over_message = True
+                else:  # if no bomb
+                    board.pieces[(self.rel_x, self.rel_y)].image = game.images[
+                        str(board.pieces[(self.rel_x, self.rel_y)].surrounding_bombs)
+                    ]
+                    board.pieces[(self.rel_x, self.rel_y)].clicked = True
+                    if board.pieces[(self.rel_x, self.rel_y)].surrounding_bombs == 0:
+                        board.flood_fill(self.rel_x, self.rel_y)
+
+
+if __name__ == "__main__":
+    game = Game("expert")
+    board = Board()
+    game.run()
